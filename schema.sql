@@ -50,6 +50,9 @@ create table if not exists patients (
   allergies text,
   current_medications text,
 
+  archived_at timestamptz,          -- إخفاء المريضة (قابل للاسترجاع) بدل المسح النهائي
+  archived_by uuid,                 -- (مرجع لاحق إلى profiles(id))
+
   created_by uuid references profiles(id),
   created_at timestamptz not null default now()
 );
@@ -126,7 +129,14 @@ create policy "patients_select" on patients for select
 create policy "patients_insert" on patients for insert
   with check (auth.uid() is not null);
 
--- لا توجد سياسة UPDATE أو DELETE => العمليتين ممنوعتين تمامًا (append-only)
+-- تعديل بيانات المريضة الأساسية (اسم/رقم/تاريخ نسائي) وإخفاؤها/استرجاعها مسموح للدكتورة والسكرتيرة
+-- ملحوظة مهمة: ده منفصل تمامًا عن visit_attachments اللي فاضلة append-only بالكامل (مفيش سياسة UPDATE ليها)
+create policy "patients_update" on patients for update
+  using (auth.uid() is not null)
+  with check (auth.uid() is not null);
+
+alter table patients add constraint patients_archived_by_fkey
+  foreign key (archived_by) references profiles(id);
 
 -- ---------- Visits: قراءة للكل، إضافة حسب الفرع ----------
 create policy "visits_select" on visits for select

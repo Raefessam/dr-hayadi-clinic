@@ -34,6 +34,7 @@
 <div class="screen active container" id="screenList">
   <div class="search-box">
     <input type="text" id="searchInput" data-i18n-placeholder="search_placeholder" oninput="renderPatientList()">
+    <button class="pill-btn" style="background:var(--rose-deep); white-space:nowrap;" onclick="toggleArchiveView()" id="archiveToggleBtn"></button>
   </div>
   <div id="patientListWrap"></div>
 </div>
@@ -43,6 +44,10 @@
   <a class="back-link" onclick="showList()">→ <span data-i18n="back_to_list">قائمة المريضات</span></a>
 
   <div class="profile-card" id="profileCard"></div>
+  <div style="display:flex; gap:8px; margin-bottom:6px;">
+    <button class="btn-secondary" style="font-size:13px; padding:9px;" onclick="startEditPatient()" data-i18n="edit_patient">تعديل البيانات</button>
+    <button class="btn-secondary" style="font-size:13px; padding:9px; border-color:var(--danger); color:var(--danger);" id="archiveActionBtn" onclick="startArchiveToggle()"></button>
+  </div>
 
   <div class="section-title" data-i18n="visits_history">سجل الزيارات</div>
   <div id="visitsWrap"></div>
@@ -153,6 +158,21 @@
   </div>
 </div>
 
+<!-- ============ مودال: تأكيد بالباسورد ============ -->
+<div class="modal-overlay" id="modalPasswordConfirm">
+  <div class="modal-sheet">
+    <div class="modal-title" id="pwConfirmTitle"></div>
+    <div class="hint" id="pwConfirmText" style="margin-bottom:14px;"></div>
+    <div class="field">
+      <label data-i18n="confirm_password">أدخل كلمة مرور حسابك للتأكيد</label>
+      <input type="password" id="pwConfirmInput">
+    </div>
+    <div class="error-msg" id="pwConfirmError" data-i18n="wrong_password"></div>
+    <button type="button" class="btn-primary" id="pwConfirmBtn" onclick="submitPasswordConfirm()" data-i18n="confirm_and_continue">تأكيد ومتابعة</button>
+    <button type="button" class="btn-secondary" style="margin-top:8px;" onclick="closeModal('modalPasswordConfirm')" data-i18n="cancel">إلغاء</button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -160,17 +180,22 @@
 <script src="config.js"></script>
 <script>
 let profile = null;         // بروفايل المستخدم الحالي
+let currentUserEmail = null;
 let branches = [];          // [{id, name}]
 let activeBranchId = null;  // الفرع الشغالة عليه الدكتورة/السكرتيرة دلوقتي
 let allPatients = [];
 let currentPatient = null;
 let stagedFiles = [];       // صور المودال الحالي قبل الرفع
 let addendumTargetVisitId = null; // لو المودال مفتوح لإضافة تصحيح على زيارة معينة
+let showArchived = false;   // عرض المريضات المخفية بدل النشطة
+let npEditingId = null;     // لو المودال مفتوح للتعديل بدل الإضافة
+let pendingPasswordAction = null; // الإجراء اللي هيتنفذ بعد تأكيد الباسورد
 
 // ---------------- تهيئة الصفحة ----------------
 (async function init() {
   const { data: { session } } = await supabaseClient.auth.getSession();
   if (!session) { window.location.href = "index.html"; return; }
+  currentUserEmail = session.user.email;
 
   const { data: prof, error: profErr } = await supabaseClient
     .from("profiles").select("*").eq("id", session.user.id).single();
@@ -199,6 +224,7 @@ let addendumTargetVisitId = null; // لو المودال مفتوح لإضافة
 
   applyLang();
   document.getElementById("langBtn").textContent = t("lang_toggle");
+  updateArchiveToggleLabel();
 
   await loadPatients();
 })();
@@ -207,6 +233,17 @@ function onLangChange() {
   document.getElementById("langBtn").textContent = t("lang_toggle");
   if (profile?.role === "doctor") updateBranchTabsUI();
   if (currentPatient) renderProfile();
+  updateArchiveToggleLabel();
+  renderPatientList();
+}
+
+function updateArchiveToggleLabel() {
+  document.getElementById("archiveToggleBtn").textContent = showArchived ? t("view_active") : t("view_archived");
+}
+
+function toggleArchiveView() {
+  showArchived = !showArchived;
+  updateArchiveToggleLabel();
   renderPatientList();
 }
 
@@ -237,19 +274,20 @@ async function loadPatients() {
 function renderPatientList() {
   const q = document.getElementById("searchInput").value.trim().toLowerCase();
   const wrap = document.getElementById("patientListWrap");
-  const filtered = allPatients.filter(p =>
+  const scoped = allPatients.filter(p => showArchived ? !!p.archived_at : !p.archived_at);
+  const filtered = scoped.filter(p =>
     !q || p.full_name.toLowerCase().includes(q) || (p.phone || "").includes(q)
   );
 
   if (filtered.length === 0) {
-    wrap.innerHTML = `<div class="empty-state">${t("no_patients")}</div>`;
+    wrap.innerHTML = `<div class="empty-state">${showArchived ? t("no_archived") : t("no_patients")}</div>`;
     return;
   }
 
   wrap.innerHTML = filtered.map(p => `
     <div class="patient-row" onclick="openPatient('${p.id}')">
       <div>
-        <div class="name">${escapeHtml(p.full_name)}</div>
+        <div class="name">${escapeHtml(p.full_name)} ${p.archived_at ? `<span class="branch-tag" style="margin-inline-start:6px;">${t("archived_badge")}</span>` : ""}</div>
         <div class="meta">${escapeHtml(p.phone)}${p.birth_date ? " · " + ageFromDate(p.birth_date) + " " + t("years") : ""}</div>
       </div>
       <div class="chev">${currentLang === "ar" ? "‹" : "›"}</div>
@@ -287,6 +325,9 @@ function onFabClick() {
   if (currentPatient) {
     openVisitModal(null);
   } else {
+    npEditingId = null;
+    document.getElementById("newPatientForm").reset();
+    document.querySelector("#modalNewPatient .modal-title").textContent = t("new_patient_title");
     openModal("modalNewPatient");
   }
 }
@@ -316,9 +357,25 @@ document.getElementById("newPatientForm").addEventListener("submit", async (e) =
     chronic_diseases: document.getElementById("npChronic").value.trim() || null,
     allergies: document.getElementById("npAllergies").value.trim() || null,
     current_medications: document.getElementById("npMeds").value.trim() || null,
-    created_by: profile.id,
   };
 
+  if (npEditingId) {
+    // التعديل محتاج تأكيد بالباسورد قبل الحفظ فعليًا
+    openPasswordConfirm(t("edit_patient_title"), "", async () => {
+      const { error } = await supabaseClient.from("patients").update(payload).eq("id", npEditingId);
+      if (error) { showToast(error.message); return; }
+      closeModal("modalNewPatient");
+      document.getElementById("newPatientForm").reset();
+      showToast(t("patient_updated"));
+      npEditingId = null;
+      await loadPatients();
+      currentPatient = allPatients.find(p => p.id === currentPatient.id);
+      renderProfile();
+    });
+    return;
+  }
+
+  payload.created_by = profile.id;
   const { data, error } = await supabaseClient.from("patients").insert(payload).select().single();
   if (error) { showToast(error.message); return; }
 
@@ -328,6 +385,76 @@ document.getElementById("newPatientForm").addEventListener("submit", async (e) =
   await loadPatients();
   openPatient(data.id);
 });
+
+function startEditPatient() {
+  npEditingId = currentPatient.id;
+  const p = currentPatient;
+  document.getElementById("npName").value = p.full_name || "";
+  document.getElementById("npPhone").value = p.phone || "";
+  document.getElementById("npBirthDate").value = p.birth_date || "";
+  document.getElementById("npAddress").value = p.address || "";
+  document.getElementById("npMarital").value = p.marital_status || "single";
+  document.getElementById("npLmp").value = p.lmp_date || "";
+  document.getElementById("npGravida").value = p.gravida ?? "";
+  document.getElementById("npPara").value = p.para ?? "";
+  document.getElementById("npMiscarriages").value = p.miscarriages ?? "";
+  document.getElementById("npContraception").value = p.contraception_method || "";
+  document.getElementById("npSurgeries").value = p.past_surgeries || "";
+  document.getElementById("npChronic").value = p.chronic_diseases || "";
+  document.getElementById("npAllergies").value = p.allergies || "";
+  document.getElementById("npMeds").value = p.current_medications || "";
+  document.querySelector("#modalNewPatient .modal-title").textContent = t("edit_patient_title");
+  openModal("modalNewPatient");
+}
+
+function startArchiveToggle() {
+  const isArchived = !!currentPatient.archived_at;
+  const title = t("archive_confirm_title");
+  const text = isArchived ? "" : t("archive_confirm_text");
+
+  openPasswordConfirm(title, text, async () => {
+    const patch = isArchived
+      ? { archived_at: null, archived_by: null }
+      : { archived_at: new Date().toISOString(), archived_by: profile.id };
+
+    const { error } = await supabaseClient.from("patients").update(patch).eq("id", currentPatient.id);
+    if (error) { showToast(error.message); return; }
+    showToast(isArchived ? t("patient_restored") : t("patient_archived"));
+    await loadPatients();
+    showList();
+  });
+}
+
+// ---------------- تأكيد بالباسورد قبل إجراءات حساسة ----------------
+function openPasswordConfirm(title, text, callback) {
+  pendingPasswordAction = callback;
+  document.getElementById("pwConfirmTitle").textContent = title;
+  document.getElementById("pwConfirmText").textContent = text;
+  document.getElementById("pwConfirmText").style.display = text ? "block" : "none";
+  document.getElementById("pwConfirmInput").value = "";
+  document.getElementById("pwConfirmError").style.display = "none";
+  openModal("modalPasswordConfirm");
+}
+
+async function submitPasswordConfirm() {
+  const pwd = document.getElementById("pwConfirmInput").value;
+  const errEl = document.getElementById("pwConfirmError");
+  const btn = document.getElementById("pwConfirmBtn");
+  if (!pwd) return;
+
+  btn.disabled = true;
+  const { error } = await supabaseClient.auth.signInWithPassword({ email: currentUserEmail, password: pwd });
+  btn.disabled = false;
+
+  if (error) {
+    errEl.style.display = "block";
+    return;
+  }
+  closeModal("modalPasswordConfirm");
+  const action = pendingPasswordAction;
+  pendingPasswordAction = null;
+  if (action) await action();
+}
 
 // ---------------- ملف المريضة ----------------
 async function openPatient(id) {
@@ -366,6 +493,9 @@ function renderProfile() {
       ${rows.map(([k, v]) => `<div><div class="dt">${k}</div><div class="dd">${escapeHtml(String(v))}</div></div>`).join("")}
     </div>
   `;
+
+  const archiveBtn = document.getElementById("archiveActionBtn");
+  archiveBtn.textContent = p.archived_at ? t("restore") : t("delete_patient");
 }
 
 function maritalLabel(v) {
