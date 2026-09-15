@@ -64,6 +64,7 @@
     const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
 
     if (error) {
+      errorMsg.textContent = error.message + " (code: " + (error.status || error.code || "?") + ")";
       errorMsg.style.display = "block";
       loginBtn.disabled = false;
       return;
