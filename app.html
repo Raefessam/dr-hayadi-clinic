@@ -138,6 +138,14 @@
     <div class="modal-title" id="visitModalTitle" data-i18n="add_visit_title">زيارة جديدة</div>
     <div class="hint" id="addendumHint" style="display:none;" data-i18n="addendum_hint"></div>
 
+    <div class="field" id="visitTypeField">
+      <label data-i18n="visit_type">نوع الزيارة</label>
+      <div style="display:flex; gap:8px;">
+        <button type="button" class="branch-tab" id="typeCheckup" style="flex:1;" onclick="selectVisitType('checkup')"></button>
+        <button type="button" class="branch-tab" id="typeConsultation" style="flex:1;" onclick="selectVisitType('consultation')"></button>
+      </div>
+    </div>
+
     <label class="camera-btn" for="photoInput">
       <span class="icon">📷</span>
       <span data-i18n="take_photo">اضغط لتصوير مستند</span>
@@ -576,7 +584,10 @@ function renderVisitItem(visit, attachments, urlMap) {
     <div class="timeline-item">
       <div class="timeline-head">
         <div class="timeline-date">${formatDate(visit.visit_date)}</div>
-        <div class="branch-tag">${escapeHtml(visit.branches?.name || "")}</div>
+        <div style="display:flex; gap:6px;">
+          ${visit.visit_type ? `<div class="branch-tag" style="background:var(--rose-deep); color:#fff; border-color:var(--rose-deep);">${t(visit.visit_type)}</div>` : ""}
+          <div class="branch-tag">${escapeHtml(visit.branches?.name || "")}</div>
+        </div>
       </div>
       ${origPhotoUrls.length ? `<div class="photo-grid">${origPhotoUrls.map(u => `<img src="${u}" onclick="openLightbox('${u}')">`).join("")}</div>` : ""}
       ${origNotes.length ? `<div class="visit-note"><div class="note-label">${t("original_entry")}</div>${origNotes.map(n => escapeHtml(n)).join("<br>")}</div>` : ""}
@@ -605,9 +616,12 @@ function formatDate(d) {
 }
 
 // ---------------- مودال الزيارة/التصحيح ----------------
+let selectedVisitType = null;
+
 function openVisitModal(visitId) {
   addendumTargetVisitId = visitId;
   stagedFiles = [];
+  selectedVisitType = null;
   renderStagedPhotos();
   document.getElementById("visitNote").value = "";
   document.getElementById("visitError").style.display = "none";
@@ -617,7 +631,19 @@ function openVisitModal(visitId) {
   document.getElementById("addendumHint").style.display = isAddendum ? "block" : "none";
   document.getElementById("saveVisitBtn").textContent = isAddendum ? t("save") : t("save_visit");
 
+  document.getElementById("visitTypeField").style.display = isAddendum ? "none" : "block";
+  document.getElementById("typeCheckup").textContent = t("checkup");
+  document.getElementById("typeConsultation").textContent = t("consultation");
+  document.getElementById("typeCheckup").classList.remove("active");
+  document.getElementById("typeConsultation").classList.remove("active");
+
   openModal("modalVisit");
+}
+
+function selectVisitType(type) {
+  selectedVisitType = type;
+  document.getElementById("typeCheckup").classList.toggle("active", type === "checkup");
+  document.getElementById("typeConsultation").classList.toggle("active", type === "consultation");
 }
 
 function onPhotosSelected(event) {
@@ -645,8 +671,15 @@ function removeStagedPhoto(i) {
 async function saveVisit() {
   const note = document.getElementById("visitNote").value.trim();
   const errEl = document.getElementById("visitError");
+  const isAddendum = !!addendumTargetVisitId;
 
   if (stagedFiles.length === 0 && !note) {
+    errEl.textContent = t("add_photo_or_note");
+    errEl.style.display = "block";
+    return;
+  }
+  if (!isAddendum && !selectedVisitType) {
+    errEl.textContent = t("select_visit_type");
     errEl.style.display = "block";
     return;
   }
@@ -658,12 +691,11 @@ async function saveVisit() {
 
   try {
     let visitId = addendumTargetVisitId;
-    const isAddendum = !!visitId;
 
     if (!isAddendum) {
       const { data: visit, error: visitErr } = await supabaseClient
         .from("visits")
-        .insert({ patient_id: currentPatient.id, branch_id: activeBranchId, created_by: profile.id })
+        .insert({ patient_id: currentPatient.id, branch_id: activeBranchId, visit_type: selectedVisitType, created_by: profile.id })
         .select().single();
       if (visitErr) throw visitErr;
       visitId = visit.id;

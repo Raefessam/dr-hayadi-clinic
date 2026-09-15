@@ -68,6 +68,7 @@ create table if not exists visits (
   patient_id uuid not null references patients(id) on delete cascade,
   branch_id uuid not null references branches(id),
   visit_date date not null default current_date,
+  visit_type text check (visit_type in ('checkup','consultation')), -- كشف / استشارة
   created_by uuid references profiles(id),
   created_at timestamptz not null default now()
 );

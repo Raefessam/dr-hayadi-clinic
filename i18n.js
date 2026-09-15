@@ -75,6 +75,10 @@ const I18N = {
     no_archived: "لا يوجد مريضات مخفية",
     restore: "استرجاع",
     archived_badge: "مخفية",
+    visit_type: "نوع الزيارة",
+    checkup: "كشف",
+    consultation: "استشارة",
+    select_visit_type: "اختر نوع الزيارة",
   },
   en: {
     dir: "ltr",
@@ -152,6 +156,10 @@ const I18N = {
     no_archived: "No archived patients",
     restore: "Restore",
     archived_badge: "Archived",
+    visit_type: "Visit type",
+    checkup: "Check-up",
+    consultation: "Consultation",
+    select_visit_type: "Select visit type",
   }
 };
 
