@@ -359,6 +359,7 @@ input, select, textarea {
   object-fit: cover;
   border-radius: 8px;
   border: 1px solid var(--line);
+  cursor: pointer;
 }
 .visit-note {
   font-size: 13.5px;

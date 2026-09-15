@@ -403,25 +403,36 @@ async function loadVisits() {
     (byVisit[a.visit_id] = byVisit[a.visit_id] || []).push(a);
   });
 
-  const html = await Promise.all(visits.map(v => renderVisitItem(v, byVisit[v.id] || [])));
-  wrap.innerHTML = html.join("");
+  // نجيب روابط كل الصور دفعة واحدة (طلب واحد بدل طلب لكل صورة) — أسرع بكتير
+  const allPaths = (attachments || []).filter(a => a.image_path).map(a => a.image_path);
+  const urlMap = {};
+  if (allPaths.length > 0) {
+    const { data: signedList } = await supabaseClient.storage
+      .from("visit-photos")
+      .createSignedUrls(allPaths, 3600);
+    (signedList || []).forEach(item => {
+      if (item.signedUrl) urlMap[item.path] = item.signedUrl;
+    });
+  }
+
+  const html = visits.map(v => renderVisitItem(v, byVisit[v.id] || [], urlMap)).join("");
+  wrap.innerHTML = html;
 }
 
-async function renderVisitItem(visit, attachments) {
+function renderVisitItem(visit, attachments, urlMap) {
   const original = attachments.filter(a => !a.is_addendum);
   const addenda = attachments.filter(a => a.is_addendum);
 
   const origPhotos = original.filter(a => a.image_path);
   const origNotes = original.filter(a => a.note).map(a => a.note);
-
-  const origPhotoUrls = await Promise.all(origPhotos.map(a => signedUrl(a.image_path)));
+  const origPhotoUrls = origPhotos.map(a => urlMap[a.image_path]).filter(Boolean);
 
   let addendaHtml = "";
   for (const a of addenda) {
     let img = "";
-    if (a.image_path) {
-      const url = await signedUrl(a.image_path);
-      img = `<div class="photo-grid" style="grid-template-columns:repeat(2,1fr); max-width:160px;"><img src="${url}"></div>`;
+    if (a.image_path && urlMap[a.image_path]) {
+      const url = urlMap[a.image_path];
+      img = `<div class="photo-grid" style="grid-template-columns:repeat(2,1fr); max-width:160px;"><img src="${url}" onclick="openLightbox('${url}')"></div>`;
     }
     addendaHtml += `
       <div class="visit-note addendum">
@@ -437,7 +448,7 @@ async function renderVisitItem(visit, attachments) {
         <div class="timeline-date">${formatDate(visit.visit_date)}</div>
         <div class="branch-tag">${escapeHtml(visit.branches?.name || "")}</div>
       </div>
-      ${origPhotoUrls.length ? `<div class="photo-grid">${origPhotoUrls.map(u => `<img src="${u}">`).join("")}</div>` : ""}
+      ${origPhotoUrls.length ? `<div class="photo-grid">${origPhotoUrls.map(u => `<img src="${u}" onclick="openLightbox('${u}')">`).join("")}</div>` : ""}
       ${origNotes.length ? `<div class="visit-note"><div class="note-label">${t("original_entry")}</div>${origNotes.map(n => escapeHtml(n)).join("<br>")}</div>` : ""}
       ${addendaHtml}
       <button class="btn-secondary" style="margin-top:10px; font-size:13px; padding:9px;" onclick="openVisitModal('${visit.id}')">${t("add_addendum")}</button>
@@ -445,9 +456,16 @@ async function renderVisitItem(visit, attachments) {
   `;
 }
 
-async function signedUrl(path) {
-  const { data } = await supabaseClient.storage.from("visit-photos").createSignedUrl(path, 3600);
-  return data?.signedUrl || "";
+function openLightbox(url) {
+  let box = document.getElementById("lightboxOverlay");
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "lightboxOverlay";
+    box.style.cssText = "position:fixed; inset:0; background:rgba(0,0,0,0.9); z-index:200; display:flex; align-items:center; justify-content:center; padding:20px;";
+    box.onclick = () => box.remove();
+    document.body.appendChild(box);
+  }
+  box.innerHTML = `<img src="${url}" style="max-width:100%; max-height:100%; object-fit:contain; border-radius:8px;">`;
 }
 
 function formatDate(d) {
