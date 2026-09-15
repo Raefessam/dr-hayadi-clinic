@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>د. هايدي علي — سجلات المريضات</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body dir="rtl">
+
+<div class="topbar">
+  <div class="brand">
+    <span id="topbarIcon" style="width:26px; height:26px; border-radius:8px; overflow:hidden; display:inline-flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.2);">
+      <img src="logo.png" alt="logo" style="width:100%; height:100%; object-fit:cover;"
+           onerror="this.remove(); document.getElementById('topbarIcon').textContent='🌸';">
+    </span>
+    <span>
+      <span data-i18n="clinic_name">د. هايدي علي</span>
+      <span class="clinic-name-en" id="branchLabel"></span>
+    </span>
+  </div>
+  <div class="actions">
+    <button class="pill-btn" onclick="toggleLang()" id="langBtn">EN</button>
+    <button class="pill-btn" onclick="logout()" data-i18n="logout">خروج</button>
+  </div>
+</div>
+
+<div class="branch-tabs" id="branchTabs" style="display:none;">
+  <button class="branch-tab" id="tabBranch1" onclick="selectBranch(0)"></button>
+  <button class="branch-tab" id="tabBranch2" onclick="selectBranch(1)"></button>
+</div>
+
+<!-- ============ شاشة قائمة المريضات ============ -->
+<div class="screen active container" id="screenList">
+  <div class="search-box">
+    <input type="text" id="searchInput" data-i18n-placeholder="search_placeholder" oninput="renderPatientList()">
+  </div>
+  <div id="patientListWrap"></div>
+</div>
+
+<!-- ============ شاشة ملف المريضة ============ -->
+<div class="screen container" id="screenProfile">
+  <a class="back-link" onclick="showList()">→ <span data-i18n="back_to_list">قائمة المريضات</span></a>
+
+  <div class="profile-card" id="profileCard"></div>
+
+  <div class="section-title" data-i18n="visits_history">سجل الزيارات</div>
+  <div id="visitsWrap"></div>
+</div>
+
+<button class="fab" id="fabBtn" onclick="onFabClick()">+</button>
+
+<!-- ============ مودال: مريضة جديدة ============ -->
+<div class="modal-overlay" id="modalNewPatient">
+  <div class="modal-sheet">
+    <div class="modal-title" data-i18n="new_patient_title">بيانات مريضة جديدة</div>
+    <form id="newPatientForm">
+      <div class="field">
+        <label data-i18n="full_name">الاسم بالكامل</label>
+        <input type="text" id="npName" required>
+      </div>
+      <div class="field">
+        <label data-i18n="phone">رقم الموبايل</label>
+        <input type="tel" id="npPhone" required>
+      </div>
+      <div class="field">
+        <label data-i18n="birth_date">تاريخ الميلاد</label>
+        <input type="date" id="npBirthDate">
+      </div>
+      <div class="field">
+        <label data-i18n="address">العنوان (اختياري)</label>
+        <input type="text" id="npAddress">
+      </div>
+      <div class="field">
+        <label data-i18n="marital_status">الحالة الاجتماعية</label>
+        <select id="npMarital">
+          <option value="single" data-i18n="ms_single">آنسة</option>
+          <option value="married" data-i18n="ms_married">متزوجة</option>
+          <option value="other" data-i18n="ms_other">أخرى</option>
+        </select>
+      </div>
+
+      <div class="section-title" data-i18n="gyn_history">التاريخ النسائي والتوليدي</div>
+      <div class="field">
+        <label data-i18n="lmp_date">تاريخ آخر دورة شهرية</label>
+        <input type="date" id="npLmp">
+      </div>
+      <div class="field">
+        <label data-i18n="gravida">عدد مرات الحمل</label>
+        <input type="number" min="0" id="npGravida">
+      </div>
+      <div class="field">
+        <label data-i18n="para">عدد الولادات</label>
+        <input type="number" min="0" id="npPara">
+      </div>
+      <div class="field">
+        <label data-i18n="miscarriages">عدد مرات الإجهاض</label>
+        <input type="number" min="0" id="npMiscarriages">
+      </div>
+      <div class="field">
+        <label data-i18n="contraception">وسيلة منع الحمل</label>
+        <input type="text" id="npContraception">
+      </div>
+      <div class="field">
+        <label data-i18n="past_surgeries">عمليات سابقة</label>
+        <textarea id="npSurgeries" rows="2"></textarea>
+      </div>
+
+      <div class="section-title" data-i18n="medical_history">التاريخ الطبي العام</div>
+      <div class="field">
+        <label data-i18n="chronic_diseases">أمراض مزمنة</label>
+        <textarea id="npChronic" rows="2"></textarea>
+      </div>
+      <div class="field">
+        <label data-i18n="allergies">حساسية من أدوية</label>
+        <textarea id="npAllergies" rows="2"></textarea>
+      </div>
+      <div class="field">
+        <label data-i18n="current_medications">أدوية حالية</label>
+        <textarea id="npMeds" rows="2"></textarea>
+      </div>
+
+      <div class="error-msg" id="npError" data-i18n="required_field"></div>
+      <button type="submit" class="btn-primary" data-i18n="save">حفظ</button>
+      <button type="button" class="btn-secondary" style="margin-top:8px;" onclick="closeModal('modalNewPatient')" data-i18n="cancel">إلغاء</button>
+    </form>
+  </div>
+</div>
+
+<!-- ============ مودال: زيارة جديدة / تصحيح ============ -->
+<div class="modal-overlay" id="modalVisit">
+  <div class="modal-sheet">
+    <div class="modal-title" id="visitModalTitle" data-i18n="add_visit_title">زيارة جديدة</div>
+    <div class="hint" id="addendumHint" style="display:none;" data-i18n="addendum_hint"></div>
+
+    <label class="camera-btn" for="photoInput">
+      <span class="icon">📷</span>
+      <span data-i18n="take_photo">اضغط لتصوير مستند</span>
+      <span class="hint" style="margin:0;" data-i18n="take_photo_hint"></span>
+    </label>
+    <input type="file" id="photoInput" accept="image/*" capture="environment" multiple style="display:none;" onchange="onPhotosSelected(event)">
+
+    <div class="staged-photos" id="stagedPhotos"></div>
+
+    <div class="field">
+      <label data-i18n="note_optional">ملاحظة / تشخيص (اختياري)</label>
+      <textarea id="visitNote" rows="3"></textarea>
+    </div>
+
+    <div class="error-msg" id="visitError" data-i18n="add_photo_or_note"></div>
+    <button type="button" class="btn-primary" id="saveVisitBtn" onclick="saveVisit()" data-i18n="save_visit">حفظ الزيارة</button>
+    <button type="button" class="btn-secondary" style="margin-top:8px;" onclick="closeModal('modalVisit')" data-i18n="cancel">إلغاء</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="i18n.js"></script>
+<script src="config.js"></script>
+<script>
+let profile = null;         // بروفايل المستخدم الحالي
+let branches = [];          // [{id, name}]
+let activeBranchId = null;  // الفرع الشغالة عليه الدكتورة/السكرتيرة دلوقتي
+let allPatients = [];
+let currentPatient = null;
+let stagedFiles = [];       // صور المودال الحالي قبل الرفع
+let addendumTargetVisitId = null; // لو المودال مفتوح لإضافة تصحيح على زيارة معينة
+
+// ---------------- تهيئة الصفحة ----------------
+(async function init() {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (!session) { window.location.href = "index.html"; return; }
+
+  const { data: prof, error: profErr } = await supabaseClient
+    .from("profiles").select("*").eq("id", session.user.id).single();
+
+  if (profErr || !prof) {
+    await supabaseClient.auth.signOut();
+    window.location.href = "index.html";
+    return;
+  }
+  profile = prof;
+
+  const { data: br } = await supabaseClient.from("branches").select("*").order("name");
+  branches = br || [];
+
+  if (profile.role === "doctor") {
+    document.getElementById("branchTabs").style.display = "flex";
+    document.getElementById("tabBranch1").textContent = t("branch_1");
+    document.getElementById("tabBranch2").textContent = t("branch_2");
+    activeBranchId = branches[0]?.id;
+    updateBranchTabsUI();
+  } else {
+    activeBranchId = profile.branch_id;
+    const b = branches.find(x => x.id === activeBranchId);
+    document.getElementById("branchLabel").textContent = b ? b.name : "";
+  }
+
+  applyLang();
+  document.getElementById("langBtn").textContent = t("lang_toggle");
+
+  await loadPatients();
+})();
+
+function onLangChange() {
+  document.getElementById("langBtn").textContent = t("lang_toggle");
+  if (profile?.role === "doctor") updateBranchTabsUI();
+  if (currentPatient) renderProfile();
+  renderPatientList();
+}
+
+function selectBranch(idx) {
+  activeBranchId = branches[idx]?.id;
+  updateBranchTabsUI();
+}
+
+function updateBranchTabsUI() {
+  const idx = branches.findIndex(b => b.id === activeBranchId);
+  document.getElementById("tabBranch1").classList.toggle("active", idx === 0);
+  document.getElementById("tabBranch2").classList.toggle("active", idx === 1);
+}
+
+async function logout() {
+  await supabaseClient.auth.signOut();
+  window.location.href = "index.html";
+}
+
+// ---------------- قائمة المريضات ----------------
+async function loadPatients() {
+  const { data, error } = await supabaseClient
+    .from("patients").select("*").order("created_at", { ascending: false });
+  allPatients = data || [];
+  renderPatientList();
+}
+
+function renderPatientList() {
+  const q = document.getElementById("searchInput").value.trim().toLowerCase();
+  const wrap = document.getElementById("patientListWrap");
+  const filtered = allPatients.filter(p =>
+    !q || p.full_name.toLowerCase().includes(q) || (p.phone || "").includes(q)
+  );
+
+  if (filtered.length === 0) {
+    wrap.innerHTML = `<div class="empty-state">${t("no_patients")}</div>`;
+    return;
+  }
+
+  wrap.innerHTML = filtered.map(p => `
+    <div class="patient-row" onclick="openPatient('${p.id}')">
+      <div>
+        <div class="name">${escapeHtml(p.full_name)}</div>
+        <div class="meta">${escapeHtml(p.phone)}${p.birth_date ? " · " + ageFromDate(p.birth_date) + " " + t("years") : ""}</div>
+      </div>
+      <div class="chev">${currentLang === "ar" ? "‹" : "›"}</div>
+    </div>
+  `).join("");
+}
+
+function ageFromDate(dateStr) {
+  const d = new Date(dateStr);
+  const diff = Date.now() - d.getTime();
+  return Math.floor(diff / (365.25 * 24 * 3600 * 1000));
+}
+
+function escapeHtml(s) {
+  return (s || "").replace(/[&<>"']/g, m => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[m]));
+}
+
+// ---------------- التنقل بين الشاشات ----------------
+function showList() {
+  document.getElementById("screenProfile").classList.remove("active");
+  document.getElementById("screenList").classList.add("active");
+  document.getElementById("fabBtn").textContent = "+";
+  currentPatient = null;
+  loadPatients();
+}
+
+function showProfileScreen() {
+  document.getElementById("screenList").classList.remove("active");
+  document.getElementById("screenProfile").classList.add("active");
+}
+
+function onFabClick() {
+  if (currentPatient) {
+    openVisitModal(null);
+  } else {
+    openModal("modalNewPatient");
+  }
+}
+
+// ---------------- مريضة جديدة ----------------
+document.getElementById("newPatientForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const name = document.getElementById("npName").value.trim();
+  const phone = document.getElementById("npPhone").value.trim();
+  const errEl = document.getElementById("npError");
+
+  if (!name || !phone) { errEl.style.display = "block"; return; }
+  errEl.style.display = "none";
+
+  const payload = {
+    full_name: name,
+    phone: phone,
+    birth_date: document.getElementById("npBirthDate").value || null,
+    address: document.getElementById("npAddress").value.trim() || null,
+    marital_status: document.getElementById("npMarital").value,
+    lmp_date: document.getElementById("npLmp").value || null,
+    gravida: document.getElementById("npGravida").value || null,
+    para: document.getElementById("npPara").value || null,
+    miscarriages: document.getElementById("npMiscarriages").value || null,
+    contraception_method: document.getElementById("npContraception").value.trim() || null,
+    past_surgeries: document.getElementById("npSurgeries").value.trim() || null,
+    chronic_diseases: document.getElementById("npChronic").value.trim() || null,
+    allergies: document.getElementById("npAllergies").value.trim() || null,
+    current_medications: document.getElementById("npMeds").value.trim() || null,
+    created_by: profile.id,
+  };
+
+  const { data, error } = await supabaseClient.from("patients").insert(payload).select().single();
+  if (error) { showToast(error.message); return; }
+
+  closeModal("modalNewPatient");
+  document.getElementById("newPatientForm").reset();
+  showToast(t("patient_saved"));
+  await loadPatients();
+  openPatient(data.id);
+});
+
+// ---------------- ملف المريضة ----------------
+async function openPatient(id) {
+  currentPatient = allPatients.find(p => p.id === id);
+  if (!currentPatient) {
+    const { data } = await supabaseClient.from("patients").select("*").eq("id", id).single();
+    currentPatient = data;
+  }
+  document.getElementById("fabBtn").textContent = "📷";
+  showProfileScreen();
+  renderProfile();
+  await loadVisits();
+}
+
+function renderProfile() {
+  const p = currentPatient;
+  const rows = [
+    [t("birth_date"), p.birth_date ? `${p.birth_date} (${ageFromDate(p.birth_date)} ${t("years")})` : t("not_specified")],
+    [t("marital_status"), maritalLabel(p.marital_status)],
+    [t("address"), p.address || t("not_specified")],
+    [t("lmp_date"), p.lmp_date || t("not_specified")],
+    [t("gravida"), p.gravida ?? t("not_specified")],
+    [t("para"), p.para ?? t("not_specified")],
+    [t("miscarriages"), p.miscarriages ?? t("not_specified")],
+    [t("contraception"), p.contraception_method || t("not_specified")],
+    [t("past_surgeries"), p.past_surgeries || t("not_specified")],
+    [t("chronic_diseases"), p.chronic_diseases || t("not_specified")],
+    [t("allergies"), p.allergies || t("not_specified")],
+    [t("current_medications"), p.current_medications || t("not_specified")],
+  ];
+
+  document.getElementById("profileCard").innerHTML = `
+    <div class="p-name">${escapeHtml(p.full_name)}</div>
+    <div class="p-phone">${escapeHtml(p.phone)}</div>
+    <div class="detail-grid">
+      ${rows.map(([k, v]) => `<div><div class="dt">${k}</div><div class="dd">${escapeHtml(String(v))}</div></div>`).join("")}
+    </div>
+  `;
+}
+
+function maritalLabel(v) {
+  if (v === "single") return t("ms_single");
+  if (v === "married") return t("ms_married");
+  if (v === "other") return t("ms_other");
+  return t("not_specified");
+}
+
+// ---------------- الزيارات ----------------
+async function loadVisits() {
+  const wrap = document.getElementById("visitsWrap");
+  wrap.innerHTML = `<div class="empty-state">${t("loading")}</div>`;
+
+  const { data: visits } = await supabaseClient
+    .from("visits")
+    .select("*, branches(name)")
+    .eq("patient_id", currentPatient.id)
+    .order("created_at", { ascending: false });
+
+  if (!visits || visits.length === 0) {
+    wrap.innerHTML = `<div class="empty-state">${t("no_visits")}</div>`;
+    return;
+  }
+
+  const visitIds = visits.map(v => v.id);
+  const { data: attachments } = await supabaseClient
+    .from("visit_attachments")
+    .select("*")
+    .in("visit_id", visitIds)
+    .order("created_at", { ascending: true });
+
+  const byVisit = {};
+  (attachments || []).forEach(a => {
+    (byVisit[a.visit_id] = byVisit[a.visit_id] || []).push(a);
+  });
+
+  const html = await Promise.all(visits.map(v => renderVisitItem(v, byVisit[v.id] || [])));
+  wrap.innerHTML = html.join("");
+}
+
+async function renderVisitItem(visit, attachments) {
+  const original = attachments.filter(a => !a.is_addendum);
+  const addenda = attachments.filter(a => a.is_addendum);
+
+  const origPhotos = original.filter(a => a.image_path);
+  const origNotes = original.filter(a => a.note).map(a => a.note);
+
+  const origPhotoUrls = await Promise.all(origPhotos.map(a => signedUrl(a.image_path)));
+
+  let addendaHtml = "";
+  for (const a of addenda) {
+    let img = "";
+    if (a.image_path) {
+      const url = await signedUrl(a.image_path);
+      img = `<div class="photo-grid" style="grid-template-columns:repeat(2,1fr); max-width:160px;"><img src="${url}"></div>`;
+    }
+    addendaHtml += `
+      <div class="visit-note addendum">
+        <div class="note-label">${t("addendum")} · ${formatDate(a.created_at)}</div>
+        ${img}
+        ${a.note ? `<div>${escapeHtml(a.note)}</div>` : ""}
+      </div>`;
+  }
+
+  return `
+    <div class="timeline-item">
+      <div class="timeline-head">
+        <div class="timeline-date">${formatDate(visit.visit_date)}</div>
+        <div class="branch-tag">${escapeHtml(visit.branches?.name || "")}</div>
+      </div>
+      ${origPhotoUrls.length ? `<div class="photo-grid">${origPhotoUrls.map(u => `<img src="${u}">`).join("")}</div>` : ""}
+      ${origNotes.length ? `<div class="visit-note"><div class="note-label">${t("original_entry")}</div>${origNotes.map(n => escapeHtml(n)).join("<br>")}</div>` : ""}
+      ${addendaHtml}
+      <button class="btn-secondary" style="margin-top:10px; font-size:13px; padding:9px;" onclick="openVisitModal('${visit.id}')">${t("add_addendum")}</button>
+    </div>
+  `;
+}
+
+async function signedUrl(path) {
+  const { data } = await supabaseClient.storage.from("visit-photos").createSignedUrl(path, 3600);
+  return data?.signedUrl || "";
+}
+
+function formatDate(d) {
+  if (!d) return "";
+  const date = new Date(d);
+  return date.toLocaleDateString(currentLang === "ar" ? "ar-EG" : "en-GB", { year: "numeric", month: "short", day: "numeric" });
+}
+
+// ---------------- مودال الزيارة/التصحيح ----------------
+function openVisitModal(visitId) {
+  addendumTargetVisitId = visitId;
+  stagedFiles = [];
+  renderStagedPhotos();
+  document.getElementById("visitNote").value = "";
+  document.getElementById("visitError").style.display = "none";
+
+  const isAddendum = !!visitId;
+  document.getElementById("visitModalTitle").textContent = isAddendum ? t("addendum_title") : t("add_visit_title");
+  document.getElementById("addendumHint").style.display = isAddendum ? "block" : "none";
+  document.getElementById("saveVisitBtn").textContent = isAddendum ? t("save") : t("save_visit");
+
+  openModal("modalVisit");
+}
+
+function onPhotosSelected(event) {
+  const files = Array.from(event.target.files || []);
+  stagedFiles = stagedFiles.concat(files);
+  renderStagedPhotos();
+  event.target.value = "";
+}
+
+function renderStagedPhotos() {
+  const wrap = document.getElementById("stagedPhotos");
+  wrap.innerHTML = stagedFiles.map((f, i) => `
+    <div class="staged-photo">
+      <img src="${URL.createObjectURL(f)}">
+      <div class="remove" onclick="removeStagedPhoto(${i})">×</div>
+    </div>
+  `).join("");
+}
+
+function removeStagedPhoto(i) {
+  stagedFiles.splice(i, 1);
+  renderStagedPhotos();
+}
+
+async function saveVisit() {
+  const note = document.getElementById("visitNote").value.trim();
+  const errEl = document.getElementById("visitError");
+
+  if (stagedFiles.length === 0 && !note) {
+    errEl.style.display = "block";
+    return;
+  }
+  errEl.style.display = "none";
+
+  const saveBtn = document.getElementById("saveVisitBtn");
+  saveBtn.disabled = true;
+  saveBtn.textContent = t("saving");
+
+  try {
+    let visitId = addendumTargetVisitId;
+    const isAddendum = !!visitId;
+
+    if (!isAddendum) {
+      const { data: visit, error: visitErr } = await supabaseClient
+        .from("visits")
+        .insert({ patient_id: currentPatient.id, branch_id: activeBranchId, created_by: profile.id })
+        .select().single();
+      if (visitErr) throw visitErr;
+      visitId = visit.id;
+    }
+
+    if (stagedFiles.length > 0) {
+      for (let i = 0; i < stagedFiles.length; i++) {
+        const file = stagedFiles[i];
+        const path = `${currentPatient.id}/${visitId}/${Date.now()}_${i}.jpg`;
+        const { error: upErr } = await supabaseClient.storage.from("visit-photos").upload(path, file);
+        if (upErr) throw upErr;
+
+        await supabaseClient.from("visit_attachments").insert({
+          visit_id: visitId,
+          image_path: path,
+          note: i === 0 ? (note || null) : null,
+          is_addendum: isAddendum,
+          created_by: profile.id,
+        });
+      }
+    } else {
+      await supabaseClient.from("visit_attachments").insert({
+        visit_id: visitId,
+        note: note,
+        is_addendum: isAddendum,
+        created_by: profile.id,
+      });
+    }
+
+    closeModal("modalVisit");
+    showToast(t("visit_saved"));
+    await loadVisits();
+  } catch (err) {
+    showToast(err.message || "Error");
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.textContent = addendumTargetVisitId ? t("save") : t("save_visit");
+  }
+}
+
+// ---------------- أدوات عامة ----------------
+function openModal(id) { document.getElementById(id).classList.add("active"); }
+function closeModal(id) { document.getElementById(id).classList.remove("active"); }
+
+function showToast(msg) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  setTimeout(() => el.classList.remove("show"), 2200);
+}
+</script>
+</body>
+</html>
