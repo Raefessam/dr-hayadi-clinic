@@ -9,10 +9,13 @@ create extension if not exists "pgcrypto";
 create table if not exists branches (
   id uuid primary key default gen_random_uuid(),
   name text not null,
+  sort_order int,          -- ترتيب ثابت للفروع (بديل عن الترتيب الأبجدي اللي بيتغير مع تغيير الاسم)
   created_at timestamptz not null default now()
 );
 
-insert into branches (name) values ('فرع 1'), ('فرع 2')
+insert into branches (name, sort_order) values
+  ('فرع حلوان - 15 مايو', 1),
+  ('فرع حدائق الأهرام - ش الخزان', 2)
   on conflict do nothing;
 
 -- ---------- ملفات المستخدمين (دكتورة/سكرتيرة) ----------

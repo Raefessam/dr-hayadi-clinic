@@ -79,6 +79,7 @@ const I18N = {
     checkup: "كشف",
     consultation: "استشارة",
     select_visit_type: "اختر نوع الزيارة",
+    select_branch_title: "اختاري الفرع اللي هتشتغلي عليه دلوقتي",
   },
   en: {
     dir: "ltr",
@@ -160,6 +161,7 @@ const I18N = {
     checkup: "Check-up",
     consultation: "Consultation",
     select_visit_type: "Select visit type",
+    select_branch_title: "Choose the branch you're working from now",
   }
 };
 

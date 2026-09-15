@@ -30,8 +30,19 @@
   <button class="branch-tab" id="tabBranch2" onclick="selectBranch(1)"></button>
 </div>
 
+<!-- ============ شاشة اختيار الفرع الإجبارية (للدكتورة بعد الدخول) ============ -->
+<div class="screen container" id="screenBranchSelect">
+  <div style="text-align:center; margin-top:40px;">
+    <div class="section-title" style="font-size:18px;" data-i18n="select_branch_title">اختاري الفرع اللي هتشتغلي عليه دلوقتي</div>
+  </div>
+  <div style="display:flex; flex-direction:column; gap:12px; margin-top:20px;">
+    <button class="patient-row" style="justify-content:center; font-size:16px; padding:22px;" id="branchChoice0" onclick="chooseInitialBranch(0)"></button>
+    <button class="patient-row" style="justify-content:center; font-size:16px; padding:22px;" id="branchChoice1" onclick="chooseInitialBranch(1)"></button>
+  </div>
+</div>
+
 <!-- ============ شاشة قائمة المريضات ============ -->
-<div class="screen active container" id="screenList">
+<div class="screen container" id="screenList">
   <div class="search-box">
     <input type="text" id="searchInput" data-i18n-placeholder="search_placeholder" oninput="renderPatientList()">
     <button class="pill-btn" style="background:var(--rose-deep); white-space:nowrap;" onclick="toggleArchiveView()" id="archiveToggleBtn"></button>
@@ -215,15 +226,24 @@ let pendingPasswordAction = null; // الإجراء اللي هيتنفذ بعد
   }
   profile = prof;
 
-  const { data: br } = await supabaseClient.from("branches").select("*").order("name");
+  const { data: br } = await supabaseClient.from("branches").select("*").order("sort_order");
   branches = br || [];
 
   if (profile.role === "doctor") {
     document.getElementById("branchTabs").style.display = "flex";
-    document.getElementById("tabBranch1").textContent = t("branch_1");
-    document.getElementById("tabBranch2").textContent = t("branch_2");
-    activeBranchId = branches[0]?.id;
-    updateBranchTabsUI();
+    document.getElementById("tabBranch1").textContent = branches[0]?.name || "";
+    document.getElementById("tabBranch2").textContent = branches[1]?.name || "";
+
+    applyLang();
+    document.getElementById("langBtn").textContent = t("lang_toggle");
+    updateArchiveToggleLabel();
+
+    // شاشة اختيار إجبارية أول ما تدخل، قبل ما تشوف أي حاجة تانية
+    document.getElementById("branchChoice0").textContent = branches[0]?.name || "";
+    document.getElementById("branchChoice1").textContent = branches[1]?.name || "";
+    document.getElementById("screenBranchSelect").classList.add("active");
+    document.getElementById("branchTabs").style.display = "none";
+    return; // مستنيين اختيارها من chooseInitialBranch قبل ما نكمل تحميل أي بيانات
   } else {
     activeBranchId = profile.branch_id;
     const b = branches.find(x => x.id === activeBranchId);
@@ -234,8 +254,18 @@ let pendingPasswordAction = null; // الإجراء اللي هيتنفذ بعد
   document.getElementById("langBtn").textContent = t("lang_toggle");
   updateArchiveToggleLabel();
 
+  document.getElementById("screenList").classList.add("active");
   await loadPatients();
 })();
+
+function chooseInitialBranch(idx) {
+  activeBranchId = branches[idx]?.id;
+  updateBranchTabsUI();
+  document.getElementById("screenBranchSelect").classList.remove("active");
+  document.getElementById("branchTabs").style.display = "flex";
+  document.getElementById("screenList").classList.add("active");
+  loadPatients();
+}
 
 function onLangChange() {
   document.getElementById("langBtn").textContent = t("lang_toggle");
